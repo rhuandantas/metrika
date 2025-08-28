@@ -9,8 +9,11 @@ import (
 )
 
 type Repository interface {
+	// SaveMetrics persists the current metrics state.
 	SaveMetrics(ctx context.Context, metrics models.Metrics) error
+	// LoadMetrics retrieves the current metrics state.
 	LoadMetrics(ctx context.Context) (models.Metrics, error)
+	// Init initializes the database schema if not exists.
 	Init(ctx context.Context) error
 }
 
@@ -34,6 +37,7 @@ func NewSQLiteMetrics(dsn string) (Repository, error) {
 }
 
 func (s *SQLiteMetrics) Init(ctx context.Context) error {
+	// Use WAL journal mode for better concurrency.
 	stmts := []string{
 		`PRAGMA journal_mode=WAL;`,
 		`CREATE TABLE IF NOT EXISTS metrics(

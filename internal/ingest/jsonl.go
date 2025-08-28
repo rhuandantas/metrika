@@ -15,6 +15,7 @@ type Event struct {
 }
 
 type EventDataWriter interface {
+	// AppendJSONL appends a JSON line to the underlying storage.
 	AppendJSONL(v any) error
 }
 

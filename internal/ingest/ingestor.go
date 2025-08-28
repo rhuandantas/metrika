@@ -96,8 +96,9 @@ func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *model
 		metrics.Update(env.Tx.Amount, round)
 	}
 
-	for _, e := range events {
-		err = i.eventJsonWriter.AppendJSONL(e)
+	// Write events to JSONL
+	if len(events) > 0 {
+		err = i.eventJsonWriter.AppendJSONL(events)
 		if err != nil {
 			i.logger.Error().Msgf("Error writing event to JSONL: %v", err)
 			return err
