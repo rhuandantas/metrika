@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/Metrika-Inc/smartblox"
 )
@@ -52,36 +53,44 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	round, err := smartblox.GetStatus()
-	if err != nil {
-		return err
-	}
-	var s Status
-	err = json.Unmarshal(round, &s)
-	if err != nil {
-		return err
-	}
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 
-	block, err := smartblox.GetBlock(s.LastRound)
-	if err != nil {
-		return err
-	}
+	for {
+		select {
+		case <-ctx.Done():
+			return context.Canceled
+		case <-ticker.C:
+			round, err := smartblox.GetStatus()
+			if err != nil {
+				return err
+			}
+			var s Status
+			err = json.Unmarshal(round, &s)
+			if err != nil {
+				return err
+			}
 
-	var b Block
-	err = json.Unmarshal(block, &b)
-	if err != nil {
-		return err
-	}
+			block, err := smartblox.GetBlock(s.LastRound)
+			if err != nil {
+				return err
+			}
 
-	log.Printf("Block Round: %d", b.Round)
-	for _, tx := range b.Txs {
-		if tx.Tx.Type == "txfer" {
-			log.Printf("Tx Sig: %s, Sender: %d, Recipient: %d, Amount: %d, Type: %s",
-				tx.Sig, tx.Tx.Sender, tx.Tx.GetRecipient(), tx.Tx.Amount, tx.Tx.Type)
+			var b Block
+			err = json.Unmarshal(block, &b)
+			if err != nil {
+				return err
+			}
+
+			log.Printf("Block Round: %d", b.Round)
+			for _, tx := range b.Txs {
+				if tx.Tx.Type == "txfer" {
+					log.Printf("Tx Sig: %s, Sender: %d, Recipient: %d, Amount: %d, Type: %s",
+						tx.Sig, tx.Tx.Sender, tx.Tx.GetRecipient(), tx.Tx.Amount, tx.Tx.Type)
+				}
+			}
 		}
 	}
-
-	return nil
 }
 
 func (t *Transaction) GetRecipient() int64 {
