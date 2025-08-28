@@ -34,7 +34,7 @@ func (i *Ingestor) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return context.Canceled
 		case <-ticker.C:
-			log.Print("tick")
+			i.logger.Info().Msg("tick")
 			if err := i.process(ctx); err != nil {
 				if errors.Is(err, context.Canceled) {
 					return err
@@ -77,22 +77,31 @@ func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *model
 		i.logger.Error().Msgf("Error getting block %d: %v", round, err)
 		return err
 	}
-	events := make([]Event, 0, len(b.Txs))
-	for i, env := range b.Txs {
+
+	events := make([]Event, 0)
+	for _, env := range b.Txs {
 		if env.Tx.Type != "txfer" {
 			continue
 		}
 		recipient := env.Tx.Receipient
 
-		events[i] = Event{
+		events = append(events, Event{
 			Round:     round,
 			Sig:       env.Sig,
 			Sender:    env.Tx.Sender,
 			Recipient: recipient,
 			Amount:    env.Tx.Amount,
-		}
+		})
 
 		metrics.Update(env.Tx.Amount, round)
+	}
+
+	for _, e := range events {
+		err = i.eventJsonWriter.AppendJSONL(e)
+		if err != nil {
+			i.logger.Error().Msgf("Error writing event to JSONL: %v", err)
+			return err
+		}
 	}
 
 	// TODO this could be processed async via queue

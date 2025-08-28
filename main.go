@@ -14,11 +14,11 @@ import (
 
 func main() {
 	var (
-		baseURL   = "http://localhost:8080"
-		sqLiteDns = "file:data/metrika.db?cache=shared&_journal=WAL&_busy_timeout=5000"
-		//eventsPath = "./data/events.jsonl"
-		pool    = 3 * time.Second
-		timeout = 4 * time.Second
+		baseURL    = "http://localhost:8080"
+		sqLiteDns  = "file:data/db/metrika.db?cache=shared&_journal=WAL&_busy_timeout=5000"
+		eventsPath = "./data/events.jsonl"
+		pool       = 5 * time.Second
+		timeout    = 60 * time.Second
 	)
 
 	logger := log.Logger.With().Str("component", "ingestor").Logger()
@@ -37,7 +37,9 @@ func main() {
 		logger.Fatal().Msgf("Failed to initialize database schema: %v", err)
 	}
 
-	ing := ingest.New(cli, pool, logger, repo)
+	eventWriter := ingest.NewEventJsonlWriter(eventsPath)
+
+	ing := ingest.New(cli, pool, logger, repo, eventWriter)
 
 	go func() {
 		if err := ing.Run(ctx); err != nil {
