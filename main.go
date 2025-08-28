@@ -2,46 +2,45 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"os"
 	"os/signal"
 	"time"
 
-	"github.com/Metrika-Inc/smartblox"
+	"github.com/rhuandantas/metrika/internal/ingest"
+	"github.com/rhuandantas/metrika/internal/repository"
+	client "github.com/rhuandantas/metrika/internal/smartblox"
 )
 
-type Status struct {
-	LastRound int64 `json:"last-round"`
-}
-
-type Transaction struct {
-	Amount int64  `json:"amount"`
-	Sender int64  `json:"sender"`
-	Type   string `json:"type"`
-	// Handle both spellings: recipient & receipient.
-	Recipient int64 `json:"recipient"`
-	// Receipient is captured only for JSON decoding compatibility.
-	Receipient int64 `json:"receipient"`
-}
-
-type TransactionEnvelope struct {
-	Sig string      `json:"sig"`
-	Tx  Transaction `json:"tx"`
-}
-
-// Block models /api/blocks/{round}
-type Block struct {
-	Round int64                 `json:"round"`
-	Txs   []TransactionEnvelope `json:"txs"`
-}
-
 func main() {
+	var (
+		baseURL   = "http://localhost:8080"
+		sqLiteDns = "file:data/metrika.db?cache=shared&_journal=WAL&_busy_timeout=5000"
+		//eventsPath = "./data/events.jsonl"
+		pool    = 3 * time.Second
+		timeout = 4 * time.Second
+	)
+
+	logger := log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds)
+
+	cli := client.NewHTTPClient(baseURL, timeout, true)
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
+	repo, err := repository.NewSQLiteMetrics(sqLiteDns)
+	if err != nil {
+		log.Fatal("Failed to initialize repository: ", err)
+	}
+
+	if err = repo.Init(ctx); err != nil {
+		log.Fatal("Failed to initialize database schema: ", err)
+	}
+
+	ing := ingest.New(cli, pool, logger, repo)
+
 	go func() {
-		if err := run(ctx); err != nil {
+		if err := ing.Run(ctx); err != nil {
 			log.Fatal("Server error: ", err)
 		}
 		stop()
@@ -49,53 +48,4 @@ func main() {
 
 	<-ctx.Done()
 	log.Print("Shutting down server gracefully...")
-
-}
-
-func run(ctx context.Context) error {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return context.Canceled
-		case <-ticker.C:
-			round, err := smartblox.GetStatus()
-			if err != nil {
-				return err
-			}
-			var s Status
-			err = json.Unmarshal(round, &s)
-			if err != nil {
-				return err
-			}
-
-			block, err := smartblox.GetBlock(s.LastRound)
-			if err != nil {
-				return err
-			}
-
-			var b Block
-			err = json.Unmarshal(block, &b)
-			if err != nil {
-				return err
-			}
-
-			log.Printf("Block Round: %d", b.Round)
-			for _, tx := range b.Txs {
-				if tx.Tx.Type == "txfer" {
-					log.Printf("Tx Sig: %s, Sender: %d, Recipient: %d, Amount: %d, Type: %s",
-						tx.Sig, tx.Tx.Sender, tx.Tx.GetRecipient(), tx.Tx.Amount, tx.Tx.Type)
-				}
-			}
-		}
-	}
-}
-
-func (t *Transaction) GetRecipient() int64 {
-	if t.Recipient != 0 {
-		return t.Recipient
-	}
-	return t.Receipient
 }

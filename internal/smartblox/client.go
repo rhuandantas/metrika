@@ -70,7 +70,6 @@ func NewHTTPClient(base string, timeout time.Duration, mockSmartBloxAPI bool) Cl
 	}
 }
 
-// GetStatus fetches the current status from the SmartBlox API.
 func (h *httpClient) GetStatus(ctx context.Context) (Status, error) {
 	if h.mockSmartBloxAPI {
 		return mockGetStatus()
