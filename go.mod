@@ -6,6 +6,7 @@ replace github.com/Metrika-Inc/smartblox => ../smartblox
 
 require (
 	github.com/Metrika-Inc/smartblox v0.0.0-20250826172911-dc4a04e5a8da
+	github.com/rs/zerolog v1.34.0
 	modernc.org/sqlite v1.38.2
 )
 
@@ -13,6 +14,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect

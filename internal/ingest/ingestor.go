@@ -3,27 +3,29 @@ package ingest
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log"
 	"time"
 
 	"github.com/rhuandantas/metrika/internal/models"
 	"github.com/rhuandantas/metrika/internal/repository"
 	"github.com/rhuandantas/metrika/internal/smartblox"
+	"github.com/rs/zerolog"
 )
 
 type Ingestor struct {
-	cli       smartblox.Client
-	poolEvery time.Duration
-	logger    *log.Logger
-	repo      repository.Repository
+	cli             smartblox.Client
+	poolEvery       time.Duration
+	logger          zerolog.Logger
+	repo            repository.Repository
+	eventJsonWriter EventDataWriter
 }
 
-func New(cli smartblox.Client, poolEvery time.Duration, logger *log.Logger, repo repository.Repository) *Ingestor {
-	return &Ingestor{cli: cli, poolEvery: poolEvery, logger: logger, repo: repo}
+func New(cli smartblox.Client, poolEvery time.Duration, logger zerolog.Logger, repo repository.Repository, eventJsonWriter EventDataWriter) *Ingestor {
+	return &Ingestor{cli: cli, poolEvery: poolEvery, logger: logger, repo: repo, eventJsonWriter: eventJsonWriter}
 }
 
 func (i *Ingestor) Run(ctx context.Context) error {
+	i.logger.Info().Msg("Starting Ingestor...")
+	i.logger.Debug().Msg("Tick interval: " + i.poolEvery.String())
 	ticker := time.NewTicker(i.poolEvery)
 	defer ticker.Stop()
 
@@ -37,7 +39,7 @@ func (i *Ingestor) Run(ctx context.Context) error {
 				if errors.Is(err, context.Canceled) {
 					return err
 				}
-				i.logger.Printf("step error: %v", err)
+				i.logger.Error().Msgf("processing error: %v", err)
 			}
 		}
 	}
@@ -46,11 +48,13 @@ func (i *Ingestor) Run(ctx context.Context) error {
 func (i *Ingestor) process(ctx context.Context) error {
 	status, err := i.cli.GetStatus(ctx)
 	if err != nil {
-		return fmt.Errorf("get status: %w", err)
+		i.logger.Error().Msgf("Error getting status: %v", err)
+		return err
 	}
 
 	metrics, err := i.repo.LoadMetrics(ctx)
 	if err != nil {
+		i.logger.Error().Msgf("Error loading metrics: %v", err)
 		return err
 	}
 
@@ -59,7 +63,7 @@ func (i *Ingestor) process(ctx context.Context) error {
 	}
 
 	for r := metrics.LastRound + 1; r <= status.LastRound; r++ {
-		if err := i.processRound(ctx, r, &metrics); err != nil {
+		if err = i.processRound(ctx, r, &metrics); err != nil {
 			return err
 		}
 	}
@@ -70,7 +74,8 @@ func (i *Ingestor) process(ctx context.Context) error {
 func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *models.Metrics) error {
 	b, err := i.cli.GetBlock(ctx, round)
 	if err != nil {
-		return fmt.Errorf("get block %d: %w", round, err)
+		i.logger.Error().Msgf("Error getting block %d: %v", round, err)
+		return err
 	}
 	events := make([]Event, 0, len(b.Txs))
 	for i, env := range b.Txs {
@@ -93,6 +98,7 @@ func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *model
 	// TODO this could be processed async via queue
 	err = i.updateMetrics(ctx, *metrics)
 	if err != nil {
+		i.logger.Error().Msgf("Error updating metrics: %v", err)
 		return err
 	}
 

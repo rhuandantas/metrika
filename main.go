@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/rhuandantas/metrika/internal/ingest"
 	"github.com/rhuandantas/metrika/internal/repository"
 	client "github.com/rhuandantas/metrika/internal/smartblox"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
@@ -21,7 +21,7 @@ func main() {
 		timeout = 4 * time.Second
 	)
 
-	logger := log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds)
+	logger := log.Logger.With().Str("component", "ingestor").Logger()
 
 	cli := client.NewHTTPClient(baseURL, timeout, true)
 
@@ -30,22 +30,22 @@ func main() {
 
 	repo, err := repository.NewSQLiteMetrics(sqLiteDns)
 	if err != nil {
-		log.Fatal("Failed to initialize repository: ", err)
+		logger.Fatal().Msgf("Failed to initialize repository: %v", err)
 	}
 
 	if err = repo.Init(ctx); err != nil {
-		log.Fatal("Failed to initialize database schema: ", err)
+		logger.Fatal().Msgf("Failed to initialize database schema: %v", err)
 	}
 
 	ing := ingest.New(cli, pool, logger, repo)
 
 	go func() {
 		if err := ing.Run(ctx); err != nil {
-			log.Fatal("Server error: ", err)
+			log.Fatal().Msgf("Server error: %v", err)
 		}
 		stop()
 	}()
 
 	<-ctx.Done()
-	log.Print("Shutting down server gracefully...")
+	log.Info().Msgf("Shutting down server gracefully...")
 }
