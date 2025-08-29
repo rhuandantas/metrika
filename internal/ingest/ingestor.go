@@ -83,14 +83,14 @@ func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *model
 		return err
 	}
 
-	events := make([]Event, 0)
+	events := make([]models.Event, 0)
 	for _, env := range b.Txs {
 		if env.Tx.Type != transactionType {
 			continue
 		}
 		recipient := env.Tx.Receipient
 
-		events = append(events, Event{
+		events = append(events, models.Event{
 			Round:     round,
 			Sig:       env.Sig,
 			Sender:    env.Tx.Sender,

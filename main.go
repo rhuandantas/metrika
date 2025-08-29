@@ -16,6 +16,7 @@ import (
 
 func main() {
 	var (
+		// TODO move to env vars or config file
 		baseURL   = "http://localhost:8080"
 		sqLiteDns = "file:data/db/metrika.db?cache=shared&_journal=WAL&_busy_timeout=5000"
 		pool      = 5 * time.Second
