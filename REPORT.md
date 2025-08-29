@@ -3,10 +3,10 @@
 ## 1. Persistence Layer
 
 **Decision:**
-Use batch updates and in-memory caching to reduce database load. Chose SQLite for fast implementation.
+Use SQLite for local persistence with batched writes and in-memory caching.
 
 **Rationale:**
-Frequent updates risk overloading the database. Batching and caching minimize write operations. SQLite was selected for its simplicity and quick setup.
+SQLite is lightweight, easy to set up, and sufficient for local storage needs. Batched writes reduce I/O overhead, and in-memory caching improves read performance.
 
 **Libraries/Tech:**
 - SQLite
@@ -89,8 +89,11 @@ Encapsulation enables easier testing and future changes.
 ---
 
 # Opportunities
-- Improve batch process by sending metrics to another service or queue for asynchronous processing, decoupling ingestion from downstream metric handling and enhancing scalability.
+- Use a robust cache like Redis for better strategies, performance and scalability.
+- Implement a more sophisticated batching mechanism that adapts to load and optimizes batch sizes dynamically.
+- Send metrics to another service or queue for asynchronous processing, decoupling ingestion from downstream metric handling and enhancing scalability.
 - Introduce configuration files for flexible runtime settings
 - Support pluggable storage backends (e.g., PostgreSQL, cloud databases)
 - Implement a mechanism to control the number of requests to the SmartBlox external API to avoid hitting rate limits (e.g., request throttling, token bucket, or leaky bucket algorithms)
+- Add support for distributed tracing to track requests across services
 - Better error handling and retry logic for transient failures when interacting with the SmartBlox API or database
