@@ -96,20 +96,8 @@ func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *model
 		metrics.Update(env.Tx.Amount, round)
 	}
 
-	// Write events to JSONL
 	if len(events) > 0 {
-		err = i.eventJsonWriter.AppendJSONL(events)
-		if err != nil {
-			i.logger.Error().Msgf("Error writing event to JSONL: %v", err)
-			return err
-		}
-	}
-
-	// TODO this could be processed async via queue
-	err = i.updateMetrics(ctx, *metrics)
-	if err != nil {
-		i.logger.Error().Msgf("Error updating metrics: %v", err)
-		return err
+		i.eventLogger.Info().Msg(fmt.Sprint(events))
 	}
 
 	return nil
