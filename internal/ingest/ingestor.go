@@ -12,6 +12,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const transactionType = "txfer"
+
 type Ingestor struct {
 	cli          smartblox.Client
 	poolEvery    time.Duration
@@ -26,6 +28,8 @@ func New(cli smartblox.Client, poolEvery time.Duration, logger, eventLogger zero
 	return &Ingestor{cli: cli, poolEvery: poolEvery, logger: logger, repo: repo, eventLogger: eventLogger}
 }
 
+// Run starts the ingestor process, polling the SmartBlox API at regular intervals defined by poolEvery.
+// It continues to run until the provided context is canceled, at which point it returns context.Canceled.
 func (i *Ingestor) Run(ctx context.Context) error {
 	i.logger.Info().Msg("Starting Ingestor...")
 	i.logger.Debug().Msg("Tick interval: " + i.poolEvery.String())
@@ -37,7 +41,7 @@ func (i *Ingestor) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return context.Canceled
 		case <-ticker.C:
-			i.logger.Info().Msg("tick")
+			i.logger.Info().Msg("Polling SmartBlox API...")
 			if err := i.process(ctx); err != nil {
 				if errors.Is(err, context.Canceled) {
 					return err
@@ -48,6 +52,7 @@ func (i *Ingestor) Run(ctx context.Context) error {
 	}
 }
 
+// process fetches the latest status from the SmartBlox API and processes any new rounds
 func (i *Ingestor) process(ctx context.Context) error {
 	status, err := i.cli.GetStatus(ctx)
 	if err != nil {
@@ -70,6 +75,7 @@ func (i *Ingestor) process(ctx context.Context) error {
 	return nil
 }
 
+// processRound processes a single round, extracting relevant events and updating metrics
 func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *models.Metrics) error {
 	b, err := i.cli.GetBlock(ctx, round)
 	if err != nil {
@@ -79,7 +85,7 @@ func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *model
 
 	events := make([]Event, 0)
 	for _, env := range b.Txs {
-		if env.Tx.Type != "txfer" {
+		if env.Tx.Type != transactionType {
 			continue
 		}
 		recipient := env.Tx.Receipient
@@ -103,7 +109,9 @@ func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *model
 	return nil
 }
 
+// getMetrics retrieves the current metrics from the repository, using a simple in-memory cache to avoid frequent database hits
 func (i *Ingestor) getMetrics(ctx context.Context) (*models.Metrics, error) {
+	// TODO improve caching strategy using redis or similar
 	if i.metricsCache == nil || time.Since(i.cacheTime) > 5*time.Minute {
 		metrics, err := i.repo.LoadMetrics(ctx)
 		if err != nil {
@@ -116,6 +124,7 @@ func (i *Ingestor) getMetrics(ctx context.Context) (*models.Metrics, error) {
 	return i.metricsCache, nil
 }
 
+// updateMetrics saves the updated metrics to the repository and updates the in-memory cache
 func (i *Ingestor) updateMetrics(ctx context.Context, metrics models.Metrics) error {
 	err := i.repo.SaveMetrics(ctx, metrics)
 	if err != nil {
