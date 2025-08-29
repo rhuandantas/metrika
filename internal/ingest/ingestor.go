@@ -13,11 +13,13 @@ import (
 )
 
 type Ingestor struct {
-	cli         smartblox.Client
-	poolEvery   time.Duration
-	logger      zerolog.Logger
-	repo        repository.Repository
-	eventLogger zerolog.Logger
+	cli          smartblox.Client
+	poolEvery    time.Duration
+	logger       zerolog.Logger
+	repo         repository.Repository
+	eventLogger  zerolog.Logger
+	metricsCache *models.Metrics
+	cacheTime    time.Time
 }
 
 func New(cli smartblox.Client, poolEvery time.Duration, logger, eventLogger zerolog.Logger, repo repository.Repository) *Ingestor {
@@ -53,14 +55,14 @@ func (i *Ingestor) process(ctx context.Context) error {
 		return err
 	}
 
-	metrics, err := i.repo.LoadMetrics(ctx)
+	metrics, err := i.getMetrics(ctx)
 	if err != nil {
 		i.logger.Error().Msgf("Error loading metrics: %v", err)
 		return err
 	}
 
 	for r := metrics.LastRound + 1; r <= status.LastRound; r++ {
-		if err = i.processRound(ctx, r, &metrics); err != nil {
+		if err = i.processRound(ctx, r, metrics); err != nil {
 			return err
 		}
 	}
@@ -101,11 +103,25 @@ func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *model
 	return nil
 }
 
+func (i *Ingestor) getMetrics(ctx context.Context) (*models.Metrics, error) {
+	if i.metricsCache == nil || time.Since(i.cacheTime) > 5*time.Minute {
+		metrics, err := i.repo.LoadMetrics(ctx)
+		if err != nil {
+			i.logger.Error().Msgf("Error loading metrics: %v", err)
+			return nil, err
+		}
+		i.metricsCache = &metrics
+		i.cacheTime = time.Now()
+	}
+	return i.metricsCache, nil
+}
+
 func (i *Ingestor) updateMetrics(ctx context.Context, metrics models.Metrics) error {
 	err := i.repo.SaveMetrics(ctx, metrics)
 	if err != nil {
 		return err
 	}
 
+	i.metricsCache = &metrics
 	return nil
 }
