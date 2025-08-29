@@ -2,8 +2,6 @@ module github.com/rhuandantas/metrika
 
 go 1.24.4
 
-replace github.com/Metrika-Inc/smartblox => ../smartblox
-
 require (
 	github.com/Metrika-Inc/smartblox v0.0.0-20250826172911-dc4a04e5a8da
 	github.com/natefinch/lumberjack v2.0.0+incompatible
