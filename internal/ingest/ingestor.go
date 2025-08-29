@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -12,15 +13,15 @@ import (
 )
 
 type Ingestor struct {
-	cli             smartblox.Client
-	poolEvery       time.Duration
-	logger          zerolog.Logger
-	repo            repository.Repository
-	eventJsonWriter EventDataWriter
+	cli         smartblox.Client
+	poolEvery   time.Duration
+	logger      zerolog.Logger
+	repo        repository.Repository
+	eventLogger zerolog.Logger
 }
 
-func New(cli smartblox.Client, poolEvery time.Duration, logger zerolog.Logger, repo repository.Repository, eventJsonWriter EventDataWriter) *Ingestor {
-	return &Ingestor{cli: cli, poolEvery: poolEvery, logger: logger, repo: repo, eventJsonWriter: eventJsonWriter}
+func New(cli smartblox.Client, poolEvery time.Duration, logger, eventLogger zerolog.Logger, repo repository.Repository) *Ingestor {
+	return &Ingestor{cli: cli, poolEvery: poolEvery, logger: logger, repo: repo, eventLogger: eventLogger}
 }
 
 func (i *Ingestor) Run(ctx context.Context) error {
@@ -58,10 +59,6 @@ func (i *Ingestor) process(ctx context.Context) error {
 		return err
 	}
 
-	if metrics.LastRound == 0 {
-		metrics.LastRound = status.LastRound - 1
-	}
-
 	for r := metrics.LastRound + 1; r <= status.LastRound; r++ {
 		if err = i.processRound(ctx, r, &metrics); err != nil {
 			return err
@@ -97,7 +94,8 @@ func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *model
 	}
 
 	if len(events) > 0 {
-		i.eventLogger.Info().Msg(fmt.Sprint(events))
+		marshal, _ := json.Marshal(events)
+		i.eventLogger.Println(string(marshal))
 	}
 
 	return nil
