@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/rhuandantas/metrika/internal/models"
@@ -17,15 +18,17 @@ const transactionType = "txfer"
 type Ingestor struct {
 	cli          smartblox.Client
 	poolEvery    time.Duration
+	persistEvery time.Duration
 	logger       zerolog.Logger
-	repo         repository.Repository
 	eventLogger  zerolog.Logger
+	repo         repository.Repository
 	metricsCache *models.Metrics
 	cacheTime    time.Time
+	mu           sync.RWMutex
 }
 
-func New(cli smartblox.Client, poolEvery time.Duration, logger, eventLogger zerolog.Logger, repo repository.Repository) *Ingestor {
-	return &Ingestor{cli: cli, poolEvery: poolEvery, logger: logger, repo: repo, eventLogger: eventLogger}
+func New(cli smartblox.Client, poolEvery, persistEvery time.Duration, logger, eventLogger zerolog.Logger, repo repository.Repository) *Ingestor {
+	return &Ingestor{cli: cli, poolEvery: poolEvery, persistEvery: persistEvery, logger: logger, repo: repo, eventLogger: eventLogger}
 }
 
 // Run starts the ingestor process, polling the SmartBlox API at regular intervals defined by poolEvery.
@@ -36,10 +39,23 @@ func (i *Ingestor) Run(ctx context.Context) error {
 	ticker := time.NewTicker(i.poolEvery)
 	defer ticker.Stop()
 
+	// Persistence goroutine
+	persistTicker := time.NewTicker(i.persistEvery)
+	defer persistTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return context.Canceled
+		case <-persistTicker.C:
+			// Persist current metrics to the database
+			i.logger.Info().Msg("Persisting metrics...")
+			i.mu.RLock()
+			metrics := i.metricsCache
+			i.mu.RUnlock()
+			if metrics != nil {
+				_ = i.updateMetrics(ctx, *metrics)
+			}
 		case <-ticker.C:
 			i.logger.Info().Msg("Polling SmartBlox API...")
 			if err := i.process(ctx); err != nil {
@@ -101,14 +117,14 @@ func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *model
 		metrics.Update(env.Tx.Amount, round)
 	}
 
-	if len(events) > 0 {
-		marshal, _ := json.Marshal(events)
-		i.eventLogger.Println(string(marshal))
-	}
-
 	err = i.updateMetrics(ctx, *metrics)
 	if err != nil {
 		return err
+	}
+
+	if len(events) > 0 {
+		marshal, _ := json.Marshal(events)
+		i.eventLogger.Println(string(marshal))
 	}
 
 	return nil
@@ -116,6 +132,8 @@ func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *model
 
 // getMetrics retrieves the current metrics from the repository, using a simple in-memory cache to avoid frequent database hits
 func (i *Ingestor) getMetrics(ctx context.Context) (*models.Metrics, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	// TODO improve caching strategy using redis or similar
 	if i.metricsCache == nil || time.Since(i.cacheTime) > 5*time.Minute {
 		metrics, err := i.repo.LoadMetrics(ctx)
@@ -136,6 +154,9 @@ func (i *Ingestor) updateMetrics(ctx context.Context, metrics models.Metrics) er
 		return err
 	}
 
+	i.mu.Lock()
 	i.metricsCache = &metrics
+	i.mu.Unlock()
+
 	return nil
 }

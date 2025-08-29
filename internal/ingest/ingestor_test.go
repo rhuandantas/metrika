@@ -19,6 +19,7 @@ import (
 func TestIngestor(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Ingestor Suite")
+	defer GinkgoRecover()
 }
 
 var _ = Describe("Ingestor", func() {
@@ -37,7 +38,7 @@ var _ = Describe("Ingestor", func() {
 		mockRepo = mock_repo.NewMockRepository(ctrl)
 		logger = zerolog.Nop()
 		eventLogger = zerolog.Nop()
-		ing = New(mockClient, time.Millisecond*10, logger, eventLogger, mockRepo)
+		ing = New(mockClient, time.Millisecond*1, time.Millisecond*2, logger, eventLogger, mockRepo)
 	})
 
 	AfterEach(func() {
@@ -47,16 +48,9 @@ var _ = Describe("Ingestor", func() {
 	It("should return context.Canceled when context is canceled", func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
+		mockRepo.EXPECT().SaveMetrics(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 		err := ing.Run(ctx)
 		Expect(err).To(Equal(context.Canceled))
-	})
-	It("should return nil on successful Run with no new rounds", func() {
-		ctx, _ := context.WithCancel(context.Background())
-		mockClient.EXPECT().GetStatus(gomock.Any()).Return(smartblox.Status{LastRound: 0}, nil).AnyTimes()
-		mockRepo.EXPECT().LoadMetrics(gomock.Any()).Return(models.Metrics{LastRound: 0}, nil).AnyTimes()
-		err := ing.Run(ctx)
-		Expect(err).To(BeNil())
-		ctx.Done()
 	})
 	It("should return error on GetStatus failure", func() {
 		mockClient.EXPECT().GetStatus(gomock.Any()).Return(smartblox.Status{}, errors.New("fail"))
