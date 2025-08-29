@@ -106,6 +106,11 @@ func (i *Ingestor) processRound(ctx context.Context, round int64, metrics *model
 		i.eventLogger.Println(string(marshal))
 	}
 
+	err = i.updateMetrics(ctx, *metrics)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/natefinch/lumberjack"
@@ -28,7 +28,7 @@ func main() {
 	logger := log.Logger.With().Logger()
 
 	ctxParent := logger.WithContext(context.Background())
-	ctx, stop := signal.NotifyContext(ctxParent, os.Interrupt)
+	ctx, stop := signal.NotifyContext(ctxParent, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	repo, err := repository.NewSQLiteMetrics(sqLiteDns)
