@@ -22,11 +22,12 @@ func main() {
 		timeout   = 60 * time.Second
 	)
 
-	logger := log.Logger.With().Str("component", "ingestor").Logger()
-
 	cli := client.NewHTTPClient(baseURL, timeout, true)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	logger := log.Logger.With().Logger()
+
+	ctxParent := logger.WithContext(context.Background())
+	ctx, stop := signal.NotifyContext(ctxParent, os.Interrupt)
 	defer stop()
 
 	repo, err := repository.NewSQLiteMetrics(sqLiteDns)
